@@ -8,7 +8,7 @@ struct directory {
     struct directory *nextDir;
 }
 
-struct dirQueue {
+struct queue {
     struct directory *head;
     struct directory *tail;
 }
@@ -16,7 +16,6 @@ struct dirQueue {
 pthread_mutex_t qlock;
 pthread_cond_t notEmpty;
 atomic_int counter = 0;
-
 
 void enqueue(struct directory *d) {
     pthread_mutex_lock(&qlock);
@@ -35,7 +34,7 @@ struct directory dequeue() {
     /* .. return removed item */
 }
 
-void searchTermInDir(char *) {
+void searchTermInDir() {
 
 }
 
@@ -56,6 +55,9 @@ int main(int argc, char *argv[]) {
     sscanf(argv[3],"%d",&numOfThreads);
     threads = (pthread_t *)calloc(numOfThreads, sizeof(pthread_t));
 
+    // Creating queue
+    struct queue *dirQueue = (struct queue*)calloc(1, sizeof(struct queue));
+
     // Checking that search root directory can be searched
     if (opendir(rootDirPath) == NULL) {
         perror("Can't search in root directory");
@@ -65,7 +67,7 @@ int main(int argc, char *argv[]) {
     // Creating root directory and put it in queue
     struct directory* D = (struct directory *)calloc(1, sizeof(struct directory));
     if (D == NULL) {
-        perror("Can't search in root directory");
+        perror("Can't allocate memory for root directory struct");
         exit(1);
     }
     D->dirPath = rootDirPath;
@@ -80,12 +82,16 @@ int main(int argc, char *argv[]) {
 
     // Creating threads
     for (i = 0; i < numOfThreads; ++i) {
-        returnVal = pthread_create(&threads[i], NULL, searchTermInDir, (void *)t);
-        if (rc) {
-        printf("ERROR in pthread_create():"
-                " %s\n",
-                strerror(rc));
-        exit(-1);
+        returnVal = pthread_create(&threads[i], NULL, searchTermInDir, NULL);
+        if (returnVal) {
+            perror("Can't create thread");
+            exit(1);
         }
     }
+
+    // Signal the threads to start
+    // TODO add
+
+    pthread_mutex_destroy(&qlock);
+    pthread_exit(NULL);
 }
