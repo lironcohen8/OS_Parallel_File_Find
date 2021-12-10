@@ -60,7 +60,8 @@ void *searchTermInDir() {
 
     // Take head directory from queue (including waiting to be not empty)
     struct directory *d = dequeue();
-    struct dirent *entry = readdir(d);
+    DIR *dir = opendir(d->dirPath);    
+    struct dirent *entry = readdir(dir);
     while (entry != NULL) {
         char *entryName = entry->d_name;
         if (strcmp(entryName, ".") || strcmp(entryName, "..")) {
@@ -74,7 +75,7 @@ void *searchTermInDir() {
         // If it's a directory
         if (S_ISDIR(entryStat.st_mode)) {
             // Checking if directory can't be searched
-            if (opendir(d->dirPath) == NULL) {
+            if ((dir = opendir(d->dirPath)) == NULL) {
                 // TODO make sure it's a full path
                 printf("Directory %s: Permission denied.\n", d->dirPath);
                 continue;
@@ -96,6 +97,7 @@ void *searchTermInDir() {
         }
     }
     // TODO add a loop here to dequeue again    
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
