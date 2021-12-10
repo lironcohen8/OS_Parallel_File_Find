@@ -21,7 +21,7 @@ struct queue {
 
 pthread_mutex_t qlock;
 pthread_cond_t notEmpty;
-atomic_int counter = 0;
+atomic_int counter;
 struct queue *dirQueue;
 char *searchTerm;
 
@@ -53,7 +53,7 @@ struct directory* dequeue() {
     return firstDirInQueue;
 }
 
-void searchTermInDir() {
+void *searchTermInDir() {
     // Waiting for all threads to be created
 
     // Waiting for signal from main thread
