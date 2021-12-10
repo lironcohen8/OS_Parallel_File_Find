@@ -95,6 +95,7 @@ void *searchTermInDir() {
                 counter++;
             }
         }
+        entry = readdir(dir);
     }
     // TODO add a loop here to dequeue again    
     return 0;
