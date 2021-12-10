@@ -2,9 +2,13 @@
 #include <dirent.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <limits.h>
 
 struct directory {
-    char *dirPath;
+    char dirPath[PATH_MAX];
     struct directory *nextDir;
 }
 
@@ -35,7 +39,48 @@ struct directory dequeue() {
 }
 
 void searchTermInDir() {
+    // Waiting for all threads to be created
 
+    // Waiting for signal from main thread
+
+    // Take head directory from queue (including waiting to be not empty)
+    struct directory *d = dequeue();
+    struct dirent entry = readdir(d);
+    while (entry != NULL) {
+        char *entryName = entry->d_name;
+        if (strcmp(entryName, ".") || strcmp(entryName, "..")) {
+            continue;
+        }
+
+        // Checking entry type
+        struct stat entryStat;
+        stat(d->dirPath, &entryStat);
+
+        // If it's a directory
+        if ((entryStat.st_mode & S_IFMT) == S_IFDIR) {
+            // Checking if directory can't be searched
+            if (opendir(d->dirPath) == NULL) {
+                // TODO make sure it's a full path
+                printf("Directory %s: Permission denied.\n", d->dirPath);
+                continue;
+            }
+            // Directory can be searched
+            else {
+                enqueue(d);
+            }
+        }
+
+        // If it's not a directort
+        else {
+            // Entry name contains search term
+            if (strstr(entryName, searchTermInDir) != NULL) {
+                // TODO make sure it's a full path
+                printf("%s\n", d->dirPath);
+                counter++;
+            }
+        }
+    }
+    // TODO add a loop here to dequeue again    
 }
 
 int main(int argc, char *argv[]) {
@@ -89,7 +134,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Signal the threads to start
+    // Signaling the threads to start
     // TODO add
 
     pthread_mutex_destroy(&qlock);
