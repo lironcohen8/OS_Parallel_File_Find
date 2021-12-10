@@ -3,39 +3,54 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <limits.h>
 
 struct directory {
-    char dirPath[PATH_MAX];
+    char *dirPath;
+    // TODO check if PATH_MAX is needed
     struct directory *nextDir;
-}
+};
 
 struct queue {
     struct directory *head;
     struct directory *tail;
-}
+};
 
 pthread_mutex_t qlock;
 pthread_cond_t notEmpty;
 atomic_int counter = 0;
+struct queue *dirQueue;
+char *searchTerm;
 
-void enqueue(struct directory *d) {
+void enqueue(struct directory *dir) {
     pthread_mutex_lock(&qlock);
-    /* … add x to queue … */
+    // Adding dir to queue
+    if (dirQueue->head == NULL) {
+        dirQueue->head = dir;
+        dirQueue->tail = dir;
+    }
+    else {
+        dirQueue->tail->nextDir = dir;
+        dirQueue->tail = dir;
+    }
     pthread_cond_signal(&notEmpty);
     pthread_mutex_unlock(&qlock);
 }
 
-struct directory dequeue() {
+struct directory* dequeue() {
+    struct directory * firstDirInQueue = NULL;
     pthread_mutex_lock(&qlock);
     // while queue is empty
-    while pthread_cond_wait(&notEmpty,&qlock) {
-    /* … remove item from queue … */
+    while (pthread_cond_wait(&notEmpty,&qlock)) {
+        // Remove first dir from queue
+        firstDirInQueue = dirQueue->head;
+        dirQueue->head = firstDirInQueue->nextDir;
     }
     pthread_mutex_unlock(&qlock);
-    /* .. return removed item */
+    return firstDirInQueue;
 }
 
 void searchTermInDir() {
@@ -45,7 +60,7 @@ void searchTermInDir() {
 
     // Take head directory from queue (including waiting to be not empty)
     struct directory *d = dequeue();
-    struct dirent entry = readdir(d);
+    struct dirent *entry = readdir(d);
     while (entry != NULL) {
         char *entryName = entry->d_name;
         if (strcmp(entryName, ".") || strcmp(entryName, "..")) {
@@ -57,7 +72,7 @@ void searchTermInDir() {
         stat(d->dirPath, &entryStat);
 
         // If it's a directory
-        if ((entryStat.st_mode & S_IFMT) == S_IFDIR) {
+        if (S_ISDIR(entryStat.st_mode)) {
             // Checking if directory can't be searched
             if (opendir(d->dirPath) == NULL) {
                 // TODO make sure it's a full path
@@ -73,7 +88,7 @@ void searchTermInDir() {
         // If it's not a directort
         else {
             // Entry name contains search term
-            if (strstr(entryName, searchTermInDir) != NULL) {
+            if (strstr(entryName, searchTerm) != NULL) {
                 // TODO make sure it's a full path
                 printf("%s\n", d->dirPath);
                 counter++;
@@ -86,7 +101,7 @@ void searchTermInDir() {
 int main(int argc, char *argv[]) {
     int numOfThreads, returnVal, i;
     pthread_t *threads;
-    char *rootDirPath, *searchTerm;
+    char *rootDirPath;
 
     // Checking number of arguments
     if (argc != 3) {
@@ -95,13 +110,13 @@ int main(int argc, char *argv[]) {
     }
 
     // Parsing arguments
-    *rootDirPath = argv[1];
-    *searchTerm = argv[2];
+    rootDirPath = argv[1];
+    searchTerm = argv[2];
     sscanf(argv[3],"%d",&numOfThreads);
     threads = (pthread_t *)calloc(numOfThreads, sizeof(pthread_t));
 
     // Creating queue
-    struct queue *dirQueue = (struct queue*)calloc(1, sizeof(struct queue));
+    dirQueue = (struct queue*)calloc(1, sizeof(struct queue));
 
     // Checking that search root directory can be searched
     if (opendir(rootDirPath) == NULL) {
