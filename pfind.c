@@ -27,6 +27,7 @@ struct dirQueue {
 struct threadsQueue {
     struct threadNode *head; // index of thread that went to sleep first
     struct threadNode *tail; // index of thread that went to sleep last
+    int numOfSleepingThreads;
 };
 
 pthread_mutex_t slock, dqlock, tqlock;
@@ -80,6 +81,7 @@ struct directoryNode* dirDequeue(int threadIndex) {
             // Remove first dir from queue
             firstDirInQueue = dirQueue->head;
             dirQueue->head = firstDirInQueue->nextDir;
+            firstDirInQueue->nextDir = NULL;
         }
     }
     pthread_mutex_unlock(&dqlock);
@@ -90,52 +92,57 @@ void *searchTermInDir(void *i) {
     // Waiting for signal from main thread
     pthread_cond_wait(&startCV, &slock);
     int threadIndex = *((int *) i);
-    // Take head directory from queue (including waiting to be not empty)
-    struct directoryNode *d = dirDequeue(threadIndex);
-    DIR *dir = opendir(d->dirPath);    
-    struct dirent *entry = readdir(dir);
-    while (entry != NULL) {
-        char *entryName = entry->d_name;
-        if (strcmp(entryName, ".") || strcmp(entryName, "..")) {
-            continue;
-        }
 
-        // Checking entry type
-        struct stat entryStat;
-        stat(d->dirPath, &entryStat);
+    while (1) {
+        while ((dirQueue->head) != NULL) {
+            // Take head directory from queue (including waiting to be not empty)
+            struct directoryNode *d = dirDequeue(threadIndex);
+            DIR *dir = opendir(d->dirPath); 
+            struct dirent *entry = readdir(dir);
+            while (entry != NULL) {
+                char *entryName = entry->d_name;
+                if (strcmp(entryName, ".") || strcmp(entryName, "..")) {
+                    continue;
+                }
 
-        // If it's a directory
-        if (S_ISDIR(entryStat.st_mode)) {
-            // Checking if directory can't be searched
-            if ((dir = opendir(d->dirPath)) == NULL) {
-                // TODO make sure it's a full path
-                printf("Directory %s: Permission denied.\n", d->dirPath);
-                continue;
-            }
-            // Directory can be searched
-            else {
-                dirEnqueue(d);
-            }
-        }
+                // Checking entry type
+                struct stat entryStat;
+                stat(d->dirPath, &entryStat);
 
-        // If it's not a directory
-        else {
-            // Entry name contains search term
-            if (strstr(entryName, searchTerm) != NULL) {
-                // TODO make sure it's a full path
-                printf("%s\n", d->dirPath);
-                counter++;
+                // If it's a directory
+                if (S_ISDIR(entryStat.st_mode)) {
+                    // Checking if directory can't be searched
+                    if ((dir = opendir(d->dirPath)) == NULL) {
+                        // TODO make sure it's a full path
+                        printf("Directory %s: Permission denied.\n", d->dirPath);
+                        continue;
+                    }
+                    // Directory can be searched
+                    else {
+                        dirEnqueue(d);
+                    }
+                }
+
+                // If it's not a directory
+                else {
+                    // Entry name contains search term
+                    if (strstr(entryName, searchTerm) != NULL) {
+                        // TODO make sure it's a full path
+                        printf("%s\n", d->dirPath);
+                        counter++;
+                    }
+                }
+                entry = readdir(dir);
             }
+            closedir(dir);
         }
-        entry = readdir(dir);
+        threadEnqueue(threadIndex);
+        pthread_cond_wait(&cvs[threadIndex], &dqlock);
     }
-    closedir(dir);
-    // TODO add a loop here to dequeue again    
-    return 0;
 }
 
 int main(int argc, char *argv[]) {
-    int numOfThreads, returnVal, i;
+    int numOfThreads, returnVal, i, numOfValidThreads;
     pthread_t *threadsArr;
     char *rootDirPath;
 
@@ -149,6 +156,7 @@ int main(int argc, char *argv[]) {
     rootDirPath = argv[1];
     searchTerm = argv[2];
     sscanf(argv[3],"%d",&numOfThreads);
+    numOfValidThreads = numOfThreads;
     threadsArr = (pthread_t *)calloc(numOfThreads, sizeof(pthread_t));
     cvs = (pthread_cond_t *)calloc(numOfThreads, sizeof(pthread_cond_t));
 
@@ -206,6 +214,20 @@ int main(int argc, char *argv[]) {
     // Signaling the threads to start
     pthread_cond_broadcast(&startCV);
 
+    while (threadsQueue->numOfSleepingThreads < numOfValidThreads) {
+    }
+
+    // Destroying locks
     pthread_mutex_destroy(&slock);
-    pthread_exit(NULL);
+    pthread_mutex_destroy(&tqlock);
+    pthread_mutex_destroy(&dqlock);
+
+    // Destroying cvs
+    for (i = 0; i < numOfThreads; ++i) {
+        pthread_cond_destroy(&cvs[i]);
+    }
+
+    // Printing message
+
+    exit(0);
 }
