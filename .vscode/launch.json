@@ -5,12 +5,13 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "name": "gcc.exe - Build and debug active file",
             "type": "cppdbg",
             "request": "launch",
             "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
-            "args": ["C:\\Users\\user\\vscode\\OS_HW4", "bla", "2"],
+            "args": ["/media/sf_OS_HW4", "bla", "2"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

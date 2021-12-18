@@ -43,6 +43,7 @@ void threadEnqueue(int index) {
     threadNode->threadIndex = index;
     
     pthread_mutex_lock(&tqlock);
+    printf("added thread %d to tQueue\n", index);
     // Adding thread Node to queue
     if (threadsQueue->head == NULL) {
         threadsQueue->head = threadNode;
@@ -55,8 +56,23 @@ void threadEnqueue(int index) {
     pthread_mutex_unlock(&tqlock);
 }
 
+struct threadNode* threadDequeue() {
+    struct threadNode* firstThreadInQueue = NULL;
+    pthread_mutex_lock(&tqlock);
+
+    // Remove first thread from queue
+    firstThreadInQueue = threadsQueue->head;
+    threadsQueue->head = firstThreadInQueue->nextThread;
+    firstThreadInQueue->nextThread = NULL;
+
+    pthread_mutex_unlock(&tqlock);
+    printf("got thread %d out of tQueue", firstThreadInQueue->threadIndex);
+    return firstThreadInQueue;
+}
+
 void dirEnqueue(struct directoryNode *dir) {
     pthread_mutex_lock(&dqlock);
+    printf("in dirEnqueue, adding path %s\n", dir->dirPath);
     // Adding dir to queue
     if (dirQueue->head == NULL) {
         dirQueue->head = dir;
@@ -78,9 +94,12 @@ void dirEnqueue(struct directoryNode *dir) {
 
 struct directoryNode* dirDequeue(int threadIndex) {
     struct directoryNode * firstDirInQueue = NULL;
+    printf("thread %d in dirDequeue\n", threadIndex);
     pthread_mutex_lock(&dqlock);
+    printf("thread %d in critical dirDequeue\n", threadIndex);
     // while queue is empty
     if ((dirQueue->head)==NULL) {// dirQueue is empty
+    printf("in if, thread is %d\n", threadIndex);
         threadEnqueue(threadIndex);
         while (pthread_cond_wait(&cvs[threadIndex], &dqlock)) {
             // Remove first dir from queue
@@ -90,12 +109,14 @@ struct directoryNode* dirDequeue(int threadIndex) {
         }
     }
     pthread_mutex_unlock(&dqlock);
+    printf("thread %d out of critical dirDequeue\n", threadIndex);
     return firstDirInQueue;
 }
 
 void *searchTermInDir(void *i) {
+    printf("in function, thread %d\n", *((int *) i));
     // Waiting for signal from main thread
-    pthread_cond_wait(&startCV, &slock);
+   // pthread_cond_wait(&startCV, &slock);
     int threadIndex = *((int *) i);
 
     while (1) {
@@ -103,6 +124,7 @@ void *searchTermInDir(void *i) {
             // Take head directory from queue (including waiting to be not empty)
             struct directoryNode *d = dirDequeue(threadIndex);
             DIR *dir = opendir(d->dirPath); 
+            printf("thread number %d is searching dir %s", threadIndex, d->dirPath);
             struct dirent *entry = readdir(dir);
             while (entry != NULL) {
                 char *entryName = entry->d_name;
@@ -149,7 +171,7 @@ void *searchTermInDir(void *i) {
 }
 
 int main(int argc, char *argv[]) {
-    int numOfThreads, returnVal, i, numOfValidThreads;
+    int numOfThreads, returnVal, i; //numOfValidThreads;
     pthread_t *threadsArr;
     char *rootDirPath;
 
@@ -164,7 +186,7 @@ int main(int argc, char *argv[]) {
     rootDirPath = argv[1];
     searchTerm = argv[2];
     sscanf(argv[3],"%d",&numOfThreads);
-    numOfValidThreads = numOfThreads;
+    // numOfValidThreads = numOfThreads;
     threadsArr = (pthread_t *)calloc(numOfThreads, sizeof(pthread_t));
     cvs = (pthread_cond_t *)calloc(numOfThreads, sizeof(pthread_cond_t));
 
@@ -226,11 +248,13 @@ int main(int argc, char *argv[]) {
         pthread_cond_init(&cvs[i], NULL);
     }
 
+    printf("start\n");
+
     // Signaling the threads to start
     pthread_cond_broadcast(&startCV);
 
-    while (threadsQueue->numOfSleepingThreads < numOfValidThreads) {
-    }
+    // while (threadsQueue->numOfSleepingThreads < numOfValidThreads) {
+    // }
 
     // Destroying locks
     pthread_mutex_destroy(&slock);
