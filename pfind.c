@@ -17,7 +17,7 @@ struct directoryNode {
 struct threadNode {
     int threadIndex;
     struct threadNode *nextThread;
-}
+};
 
 struct dirQueue {
     struct directoryNode *head;
@@ -29,15 +29,33 @@ struct threadsQueue {
     struct threadNode *tail; // index of thread that went to sleep last
 };
 
-pthread_mutex_t qlock;
+pthread_mutex_t slock, dqlock, tqlock;
 pthread_cond_t startCV;
+pthread_cond_t *cvs;
 atomic_int counter;
 struct dirQueue *dirQueue;
 struct threadsQueue *threadsQueue;
 char *searchTerm;
 
+void threadEnqueue(int index) {
+    struct threadNode *threadNode = (struct threadNode *)calloc(1, sizeof(struct threadNode));
+    threadNode->threadIndex = index;
+    
+    pthread_mutex_lock(&tqlock);
+    // Adding thread Node to queue
+    if (threadsQueue->head == NULL) {
+        threadsQueue->head = threadNode;
+        threadsQueue->tail = threadNode;
+    }
+    else {
+        threadsQueue->tail->nextThread = threadNode;
+        threadsQueue->tail = threadNode;
+    }
+    pthread_mutex_unlock(&tqlock);
+}
+
 void dirEnqueue(struct directoryNode *dir) {
-    pthread_mutex_lock(&qlock);
+    pthread_mutex_lock(&dqlock);
     // Adding dir to queue
     if (dirQueue->head == NULL) {
         dirQueue->head = dir;
@@ -49,46 +67,31 @@ void dirEnqueue(struct directoryNode *dir) {
     }
     int indexToWake = threadsQueue->head->threadIndex;
     pthread_cond_signal(&cvs[indexToWake]);
-    pthread_mutex_unlock(&qlock);
+    pthread_mutex_unlock(&dqlock);
 }
 
 struct directoryNode* dirDequeue(int threadIndex) {
     struct directoryNode * firstDirInQueue = NULL;
-    pthread_mutex_lock(&qlock);
+    pthread_mutex_lock(&dqlock);
     // while queue is empty
     if ((dirQueue->head)==NULL) {// dirQueue is empty
         threadEnqueue(threadIndex);
-        while (pthread_cond_wait(&cvs[i], &qlock)) {
+        while (pthread_cond_wait(&cvs[threadIndex], &dqlock)) {
             // Remove first dir from queue
             firstDirInQueue = dirQueue->head;
             dirQueue->head = firstDirInQueue->nextDir;
         }
     }
-    pthread_mutex_unlock(&qlock);
+    pthread_mutex_unlock(&dqlock);
     return firstDirInQueue;
 }
 
-void threadEnqueue(int index) {
-    struct threadNode *threadNode = (struct threadNode *)calloc(1, sizeof(struct threadNode));
-    threadNode->threadIndex = index;
-
-    // Adding thread Node to queue
-    if (threadsQueue->head == NULL) {
-        threadsQueue->head = threadNode;
-        threadsQueue->tail = threadNode;
-    }
-    else {
-        threadsQueue->tail->nextThread = threadNode;
-        threadsQueue->tail = threadNode;
-    }
-}
-
-void *searchTermInDir(int i) {
+void *searchTermInDir(void *i) {
     // Waiting for signal from main thread
-    pthread_cond_wait(&startCV, qlock);
-
+    pthread_cond_wait(&startCV, &slock);
+    int threadIndex = *((int *) i);
     // Take head directory from queue (including waiting to be not empty)
-    struct directoryNode *d = dequeue(i);
+    struct directoryNode *d = dirDequeue(threadIndex);
     DIR *dir = opendir(d->dirPath);    
     struct dirent *entry = readdir(dir);
     while (entry != NULL) {
@@ -111,7 +114,7 @@ void *searchTermInDir(int i) {
             }
             // Directory can be searched
             else {
-                enqueue(d);
+                dirEnqueue(d);
             }
         }
 
@@ -124,17 +127,16 @@ void *searchTermInDir(int i) {
                 counter++;
             }
         }
-        closedir(d->dirPath);
         entry = readdir(dir);
     }
+    closedir(dir);
     // TODO add a loop here to dequeue again    
     return 0;
 }
 
 int main(int argc, char *argv[]) {
     int numOfThreads, returnVal, i;
-    struct threadNode *threadsArr;
-    pthread_cond_t *cvs;
+    pthread_t *threadsArr;
     char *rootDirPath;
 
     // Checking number of arguments
@@ -171,10 +173,20 @@ int main(int argc, char *argv[]) {
     D->dirPath = rootDirPath;
     dirEnqueue(D);
 
-    // Initializing mutex
-    returnVal = pthread_mutex_init(&qlock, NULL);
+    // Initializing start lock, dirQueue lock and threadsQueue lock
+    returnVal = pthread_mutex_init(&slock, NULL);
     if (returnVal) {
-        perror("Can't initialize mutex");
+        perror("Can't initialize slock mutex");
+        exit(1);
+    }
+    returnVal = pthread_mutex_init(&dqlock, NULL);
+    if (returnVal) {
+        perror("Can't initialize dqlock mutex");
+        exit(1);
+    }
+    returnVal = pthread_mutex_init(&tqlock, NULL);
+    if (returnVal) {
+        perror("Can't initialize tqlock mutex");
         exit(1);
     }
     
@@ -183,17 +195,17 @@ int main(int argc, char *argv[]) {
 
     // Creating threads and cvs
     for (i = 0; i < numOfThreads; ++i) {
-        returnVal = pthread_create(&threadsArr[i], NULL, searchTermInDir, i);
+        returnVal = pthread_create(&threadsArr[i], NULL, searchTermInDir, (void *)&i);
         if (returnVal) {
             perror("Can't create thread");
             exit(1);
         }
-        pthread_cond_init(cvs[i], NULL);
+        pthread_cond_init(&cvs[i], NULL);
     }
 
     // Signaling the threads to start
     pthread_cond_broadcast(&startCV);
 
-    pthread_mutex_destroy(&qlock);
+    pthread_mutex_destroy(&slock);
     pthread_exit(NULL);
 }
