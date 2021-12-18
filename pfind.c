@@ -61,13 +61,18 @@ void dirEnqueue(struct directoryNode *dir) {
     if (dirQueue->head == NULL) {
         dirQueue->head = dir;
         dirQueue->tail = dir;
+        if ((threadsQueue->head) != NULL) {
+            int indexToWake = threadsQueue->head->threadIndex;
+            pthread_cond_signal(&cvs[indexToWake]);
+            threadsQueue->numOfSleepingThreads--;
+            threadsQueue->head = threadsQueue->head->nextThread;
+        }
     }
     else {
         dirQueue->tail->nextDir = dir;
         dirQueue->tail = dir;
     }
-    int indexToWake = threadsQueue->head->threadIndex;
-    pthread_cond_signal(&cvs[indexToWake]);
+    
     pthread_mutex_unlock(&dqlock);
 }
 
@@ -137,7 +142,9 @@ void *searchTermInDir(void *i) {
             closedir(dir);
         }
         threadEnqueue(threadIndex);
+        threadsQueue->numOfSleepingThreads++;
         pthread_cond_wait(&cvs[threadIndex], &dqlock);
+        
     }
 }
 
@@ -147,12 +154,13 @@ int main(int argc, char *argv[]) {
     char *rootDirPath;
 
     // Checking number of arguments
-    if (argc != 3) {
+    if (argc != 4) {
         perror("Number of cmd args is not 3");
 	    exit(1);
     }
 
     // Parsing arguments
+    printf("parsing\n");
     rootDirPath = argv[1];
     searchTerm = argv[2];
     sscanf(argv[3],"%d",&numOfThreads);
@@ -161,27 +169,33 @@ int main(int argc, char *argv[]) {
     cvs = (pthread_cond_t *)calloc(numOfThreads, sizeof(pthread_cond_t));
 
     // Creating directory queue
+    printf("creating dQueue\n");
     dirQueue = (struct dirQueue*)calloc(1, sizeof(struct dirQueue));
     
     // Creating threads sleeping queue
+    printf("creating tQueue\n");
     threadsQueue = (struct threadsQueue*)calloc(1, sizeof(struct threadsQueue));
 
     // Checking that search root directory can be searched
+    printf("trying to open root\n");
     if (opendir(rootDirPath) == NULL) {
         perror("Can't search in root directory");
         exit(1);
     }
 
-    // Creating root directory and put it in queue
+    // Creating root directory node and put it in queue
+    printf("Creating root directory and put it in queue\n");
     struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
     if (D == NULL) {
         perror("Can't allocate memory for root directory struct");
         exit(1);
     }
     D->dirPath = rootDirPath;
+    printf("before dir enqueue\n");
     dirEnqueue(D);
 
     // Initializing start lock, dirQueue lock and threadsQueue lock
+    printf("init locks\n");
     returnVal = pthread_mutex_init(&slock, NULL);
     if (returnVal) {
         perror("Can't initialize slock mutex");
@@ -202,6 +216,7 @@ int main(int argc, char *argv[]) {
     pthread_cond_init(&startCV, NULL);
 
     // Creating threads and cvs
+    printf("Creating threads and cvs\n");
     for (i = 0; i < numOfThreads; ++i) {
         returnVal = pthread_create(&threadsArr[i], NULL, searchTermInDir, (void *)&i);
         if (returnVal) {
@@ -228,6 +243,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Printing message
+    printf("Done searching, found %d files\n", counter);
 
     exit(0);
 }
