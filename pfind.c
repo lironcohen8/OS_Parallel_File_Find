@@ -79,18 +79,17 @@ void dirEnqueue(struct directoryNode *dir) {
     if (dirQueue->head == NULL) {
         dirQueue->head = dir;
         dirQueue->tail = dir;
-        if ((threadsQueue->head) != NULL) {
-            int indexToWake = threadsQueue->head->threadIndex;
-            pthread_cond_signal(&cvs[indexToWake]);
-            threadsQueue->numOfSleepingThreads--;
-            threadsQueue->head = threadsQueue->head->nextThread;
-        }
     }
     else {
         dirQueue->tail->nextDir = dir;
         dirQueue->tail = dir;
     }
-    
+    if ((threadsQueue->head) != NULL) {
+        int indexToWake = threadsQueue->head->threadIndex;
+        pthread_cond_signal(&cvs[indexToWake]);
+        threadsQueue->numOfSleepingThreads--;
+        threadsQueue->head = threadsQueue->head->nextThread;
+    }
     pthread_mutex_unlock(&dqlock);
 }
 
@@ -132,17 +131,11 @@ void *searchTermInDir(void *i) {
                 char *entryName = entry->d_name;
                 printf("thread number %d is searching entry name %s\n", threadIndex, entryName);
                 if ((strcmp(entryName, ".") == 0) || (strcmp(entryName, "..") == 0)) {
-                    printf("in continue, and entry name is %s\n", entryName);
                     continue;
                 }
 
-                // Checking entry type
-                struct stat entryStat;
-                stat(d->dirPath, &entryStat);
-
                 // If it's a directory
                 if (entry->d_type == DT_DIR) {
-                    printf("thread number %d found that %s is a dir\n", threadIndex, entryName);
                     // Checking if directory can't be searched
                     if ((dir = opendir(d->dirPath)) == NULL) {
                         // TODO make sure it's a full path
@@ -157,11 +150,10 @@ void *searchTermInDir(void *i) {
 
                 // If it's not a directory
                 else {
-                    printf("thread number %d found that %s is not a dir\n", threadIndex, entryName);
                     // Entry name contains search term
                     if (strstr(entryName, searchTerm) != NULL) {
                         // TODO make sure it's a full path
-                        printf("%s\n", d->dirPath);
+                        printf("%s/%s\n", d->dirPath, entryName);
                         counter++;
                     }
                 }
@@ -187,7 +179,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Parsing arguments
-    printf("parsing\n");
+    // printf("parsing\n");
     rootDirPath = argv[1];
     searchTerm = argv[2];
     sscanf(argv[3],"%d",&numOfThreads);
@@ -196,33 +188,33 @@ int main(int argc, char *argv[]) {
     cvs = (pthread_cond_t *)calloc(numOfThreads, sizeof(pthread_cond_t));
 
     // Creating directory queue
-    printf("creating dQueue\n");
+    // printf("creating dQueue\n");
     dirQueue = (struct dirQueue*)calloc(1, sizeof(struct dirQueue));
     
     // Creating threads sleeping queue
-    printf("creating tQueue\n");
+    // printf("creating tQueue\n");
     threadsQueue = (struct threadsQueue*)calloc(1, sizeof(struct threadsQueue));
 
     // Checking that search root directory can be searched
-    printf("trying to open root\n");
+    // printf("trying to open root\n");
     if (opendir(rootDirPath) == NULL) {
         perror("Can't search in root directory");
         exit(1);
     }
 
     // Creating root directory node and put it in queue
-    printf("Creating root directory and put it in queue\n");
+    // printf("Creating root directory and put it in queue\n");
     struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
     if (D == NULL) {
         perror("Can't allocate memory for root directory struct");
         exit(1);
     }
     D->dirPath = rootDirPath;
-    printf("before dir enqueue\n");
+    // printf("before dir enqueue\n");
     dirEnqueue(D);
 
     // Initializing start lock, dirQueue lock and threadsQueue lock
-    printf("init locks\n");
+    // printf("init locks\n");
     returnVal = pthread_mutex_init(&slock, NULL);
     if (returnVal) {
         perror("Can't initialize slock mutex");
@@ -243,7 +235,7 @@ int main(int argc, char *argv[]) {
     pthread_cond_init(&startCV, NULL);
 
     // Creating threads and cvs
-    printf("Creating threads and cvs\n");
+    // printf("Creating threads and cvs\n");
     for (i = 0; i < numOfThreads; ++i) {
         returnVal = pthread_create(&threadsArr[i], NULL, searchTermInDir, (void *)&i);
         if (returnVal) {
