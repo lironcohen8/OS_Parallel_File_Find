@@ -144,6 +144,8 @@ void *searchTermInDir(void *i) {
                     }
                     // Directory can be searched
                     else {
+                        d->dirPath = strcat(d->dirPath, "/");
+                        d->dirPath = strcat(d->dirPath, entryName);
                         dirEnqueue(d);
                     }
                 }
