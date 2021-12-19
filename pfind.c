@@ -129,7 +129,7 @@ void *searchTermInDir(void *i) {
             printf("thread number %d is searching dir %s\n", threadIndex, d->dirPath);
             while ((entry = readdir(dir)) != NULL) {
                 char *entryName = entry->d_name;
-                printf("thread number %d is searching entry name %s\n", threadIndex, entryName);
+                printf("thread number %d is searching folder %s entry %s\n", threadIndex, d->dirPath, entryName);
                 if ((strcmp(entryName, ".") == 0) || (strcmp(entryName, "..") == 0)) {
                     continue;
                 }
@@ -137,7 +137,7 @@ void *searchTermInDir(void *i) {
                 // If it's a directory
                 if (entry->d_type == DT_DIR) {
                     // Checking if directory can't be searched
-                    if ((dir = opendir(d->dirPath)) == NULL) {
+                    if (opendir(d->dirPath) == NULL) {
                         // TODO make sure it's a full path
                         printf("Directory %s: Permission denied.\n", d->dirPath);
                         continue;
@@ -160,6 +160,7 @@ void *searchTermInDir(void *i) {
                     }
                 }
             }
+            printf("finished dir %s\n", d->dirPath);
             closedir(dir);
         }
         threadEnqueue(threadIndex);
