@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <sys/types.h>
 #include <dirent.h>
 #include <pthread.h>
@@ -102,12 +104,12 @@ struct directoryNode* dirDequeue(int threadIndex) {
     printf("in if, thread is %d\n", threadIndex);
         threadEnqueue(threadIndex);
         while (pthread_cond_wait(&cvs[threadIndex], &dqlock)) {
-            // Remove first dir from queue
-            firstDirInQueue = dirQueue->head;
-            dirQueue->head = firstDirInQueue->nextDir;
-            firstDirInQueue->nextDir = NULL;
         }
     }
+    // Remove first dir from queue
+    firstDirInQueue = dirQueue->head;
+    dirQueue->head = firstDirInQueue->nextDir;
+    firstDirInQueue->nextDir = NULL;
     pthread_mutex_unlock(&dqlock);
     printf("thread %d out of critical dirDequeue\n", threadIndex);
     return firstDirInQueue;
@@ -116,19 +118,21 @@ struct directoryNode* dirDequeue(int threadIndex) {
 void *searchTermInDir(void *i) {
     printf("in function, thread %d\n", *((int *) i));
     // Waiting for signal from main thread
-   // pthread_cond_wait(&startCV, &slock);
+    // pthread_cond_wait(&startCV, &slock);
     int threadIndex = *((int *) i);
 
     while (1) {
         while ((dirQueue->head) != NULL) {
             // Take head directory from queue (including waiting to be not empty)
             struct directoryNode *d = dirDequeue(threadIndex);
+            struct dirent *entry;
             DIR *dir = opendir(d->dirPath); 
-            printf("thread number %d is searching dir %s", threadIndex, d->dirPath);
-            struct dirent *entry = readdir(dir);
-            while (entry != NULL) {
+            printf("thread number %d is searching dir %s\n", threadIndex, d->dirPath);
+            while ((entry = readdir(dir)) != NULL) {
                 char *entryName = entry->d_name;
-                if (strcmp(entryName, ".") || strcmp(entryName, "..")) {
+                printf("thread number %d is searching entry name %s\n", threadIndex, entryName);
+                if ((strcmp(entryName, ".") == 0) || (strcmp(entryName, "..") == 0)) {
+                    printf("in continue, and entry name is %s\n", entryName);
                     continue;
                 }
 
@@ -137,7 +141,8 @@ void *searchTermInDir(void *i) {
                 stat(d->dirPath, &entryStat);
 
                 // If it's a directory
-                if (S_ISDIR(entryStat.st_mode)) {
+                if (entry->d_type == DT_DIR) {
+                    printf("thread number %d found that %s is a dir\n", threadIndex, entryName);
                     // Checking if directory can't be searched
                     if ((dir = opendir(d->dirPath)) == NULL) {
                         // TODO make sure it's a full path
@@ -152,6 +157,7 @@ void *searchTermInDir(void *i) {
 
                 // If it's not a directory
                 else {
+                    printf("thread number %d found that %s is not a dir\n", threadIndex, entryName);
                     // Entry name contains search term
                     if (strstr(entryName, searchTerm) != NULL) {
                         // TODO make sure it's a full path
@@ -159,7 +165,6 @@ void *searchTermInDir(void *i) {
                         counter++;
                     }
                 }
-                entry = readdir(dir);
             }
             closedir(dir);
         }
