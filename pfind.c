@@ -95,12 +95,9 @@ void dirEnqueue(struct directoryNode *dir) {
 
 struct directoryNode* dirDequeue(int threadIndex) {
     struct directoryNode * firstDirInQueue = NULL;
-    printf("thread %d in dirDequeue\n", threadIndex);
     pthread_mutex_lock(&dqlock);
-    printf("thread %d in critical dirDequeue\n", threadIndex);
     // while queue is empty
     if ((dirQueue->head)==NULL) {// dirQueue is empty
-    printf("in if, thread is %d\n", threadIndex);
         threadEnqueue(threadIndex);
         while (pthread_cond_wait(&cvs[threadIndex], &dqlock)) {
         }
@@ -110,7 +107,7 @@ struct directoryNode* dirDequeue(int threadIndex) {
     dirQueue->head = firstDirInQueue->nextDir;
     firstDirInQueue->nextDir = NULL;
     pthread_mutex_unlock(&dqlock);
-    printf("thread %d out of critical dirDequeue\n", threadIndex);
+    printf("in dirDequeue, got path %s\n", firstDirInQueue->dirPath);
     return firstDirInQueue;
 }
 
