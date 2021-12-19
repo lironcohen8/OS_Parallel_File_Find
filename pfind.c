@@ -35,7 +35,7 @@ struct threadsQueue {
 pthread_mutex_t slock, dqlock, tqlock;
 pthread_cond_t startCV;
 pthread_cond_t *cvs;
-atomic_int counter;
+atomic_int fileCounter, waitingForStartCounter;
 struct dirQueue *dirQueue;
 struct threadsQueue *threadsQueue;
 char *searchTerm;
@@ -72,20 +72,27 @@ struct threadNode* threadDequeue() {
     return firstThreadInQueue;
 }
 
-void dirEnqueue(struct directoryNode *dir) {
+void dirEnqueue(char *path, char *name) {
     pthread_mutex_lock(&dqlock);
-    printf("in dirEnqueue, adding path %s\n", dir->dirPath);
+    // Creating directory node
+    struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
+    D->dirPath = (char *)calloc(1, PATH_MAX);
+    strcat(D->dirPath, path);
+    strcat(D->dirPath, "/");
+    strcat(D->dirPath, name);
+    printf("in dirEnqueue, adding path %s\n", D->dirPath);
     // Adding dir to queue
     if (dirQueue->head == NULL) {
-        dirQueue->head = dir;
-        dirQueue->tail = dir;
+        dirQueue->head = D;
+        dirQueue->tail = D;
     }
     else {
-        dirQueue->tail->nextDir = dir;
-        dirQueue->tail = dir;
+        dirQueue->tail->nextDir = D;
+        dirQueue->tail = D;
     }
     if ((threadsQueue->head) != NULL) {
         int indexToWake = threadsQueue->head->threadIndex;
+        printf("signaling thread %d\n", indexToWake);
         pthread_cond_signal(&cvs[indexToWake]);
         threadsQueue->numOfSleepingThreads--;
         threadsQueue->head = threadsQueue->head->nextThread;
@@ -97,7 +104,7 @@ struct directoryNode* dirDequeue(int threadIndex) {
     struct directoryNode * firstDirInQueue = NULL;
     pthread_mutex_lock(&dqlock);
     // while queue is empty
-    if ((dirQueue->head)==NULL) {// dirQueue is empty
+    if ((dirQueue->head)==NULL) {
         threadEnqueue(threadIndex);
         while (pthread_cond_wait(&cvs[threadIndex], &dqlock)) {
         }
@@ -114,7 +121,8 @@ struct directoryNode* dirDequeue(int threadIndex) {
 void *searchTermInDir(void *i) {
     printf("in function, thread %d\n", *((int *) i));
     // Waiting for signal from main thread
-    // pthread_cond_wait(&startCV, &slock);
+    //waitingForStartCounter++;
+    //pthread_cond_wait(&startCV, &slock);
     int threadIndex = *((int *) i);
 
     while (1) {
@@ -140,10 +148,8 @@ void *searchTermInDir(void *i) {
                         continue;
                     }
                     // Directory can be searched
-                    else {
-                        d->dirPath = strcat(d->dirPath, "/");
-                        d->dirPath = strcat(d->dirPath, entryName);
-                        dirEnqueue(d);
+                    else {                        
+                        dirEnqueue(d->dirPath, entryName);
                     }
                 }
 
@@ -153,7 +159,7 @@ void *searchTermInDir(void *i) {
                     if (strstr(entryName, searchTerm) != NULL) {
                         // TODO make sure it's a full path
                         printf("%s/%s\n", d->dirPath, entryName);
-                        counter++;
+                        fileCounter++;
                     }
                 }
             }
@@ -161,9 +167,7 @@ void *searchTermInDir(void *i) {
             closedir(dir);
         }
         threadEnqueue(threadIndex);
-        threadsQueue->numOfSleepingThreads++;
         pthread_cond_wait(&cvs[threadIndex], &dqlock);
-        
     }
 }
 
@@ -202,16 +206,13 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    // Creating root directory node and put it in queue
+    // Adding root directory to dirQueue
     // printf("Creating root directory and put it in queue\n");
-    struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
-    if (D == NULL) {
-        perror("Can't allocate memory for root directory struct");
-        exit(1);
-    }
-    D->dirPath = rootDirPath;
     // printf("before dir enqueue\n");
-    dirEnqueue(D);
+    struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
+    D->dirPath = rootDirPath;
+    dirQueue->head = D;
+    dirQueue->tail = D;
 
     // Initializing start lock, dirQueue lock and threadsQueue lock
     // printf("init locks\n");
@@ -233,6 +234,7 @@ int main(int argc, char *argv[]) {
     
     // Creating start CV
     pthread_cond_init(&startCV, NULL);
+    pthread_mutex_lock(&slock);
 
     // Creating threads and cvs
     // printf("Creating threads and cvs\n");
@@ -245,13 +247,11 @@ int main(int argc, char *argv[]) {
         pthread_cond_init(&cvs[i], NULL);
     }
 
-    printf("start\n");
+    // while (waitingForStartCounter < numOfThreads) {
+    // }
 
     // Signaling the threads to start
-    pthread_cond_broadcast(&startCV);
-
-    // while (threadsQueue->numOfSleepingThreads < numOfValidThreads) {
-    // }
+    // pthread_cond_broadcast(&startCV);
 
     // Destroying locks
     pthread_mutex_destroy(&slock);
@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Printing message
-    printf("Done searching, found %d files\n", counter);
+    printf("Done searching, found %d files\n", fileCounter);
 
     exit(0);
 }
