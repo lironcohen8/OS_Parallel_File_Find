@@ -32,11 +32,11 @@ struct threadsQueue {
     int numOfSleepingThreads;
 };
 
-pthread_mutex_t slock, dqlock, tqlock;
-pthread_cond_t startCV;
+pthread_mutex_t slock, dqlock, tqlock, elock;
+pthread_cond_t startCV, endCV;
 pthread_cond_t *cvs;
-atomic_int fileCounter;
-int startFlag = 0;
+atomic_int fileCounter, numOfSleepingThreads;
+int numOfThreads, startFlag, endFlag;
 struct dirQueue *dirQueue;
 struct threadsQueue *threadsQueue;
 char *searchTerm;
@@ -55,6 +55,13 @@ void threadEnqueue(int index) {
     else {
         threadsQueue->tail->nextThread = threadNode;
         threadsQueue->tail = threadNode;
+    }
+    if ((++numOfSleepingThreads == numOfThreads) && ((dirQueue->head) == NULL)) {
+        printf("waking main for end\n");
+        endFlag = 1;
+        pthread_mutex_lock(&elock);
+        pthread_cond_signal(&endCV);
+        pthread_mutex_unlock(&elock);
     }
     pthread_mutex_unlock(&tqlock);
 }
@@ -122,10 +129,12 @@ struct directoryNode* dirDequeue(int threadIndex) {
 void *searchTermInDir(void *i) {
     printf("in function, thread %d\n", *((int *) i));
     // Waiting for signal from main thread
+    pthread_mutex_lock(&slock);
     while (startFlag == 0) {
         printf("thread %d is waiting\n",  *((int *) i));
         pthread_cond_wait(&startCV, &slock);
     }
+    pthread_mutex_unlock(&slock);
     printf("thread %d is starting\n",  *((int *) i));
     int threadIndex = *((int *) i);
 
@@ -177,7 +186,7 @@ void *searchTermInDir(void *i) {
 }
 
 int main(int argc, char *argv[]) {
-    int numOfThreads, returnVal, i; //numOfValidThreads;
+    int returnVal, i; //numOfValidThreads;
     pthread_t *threadsArr;
     char *rootDirPath;
 
@@ -219,11 +228,16 @@ int main(int argc, char *argv[]) {
     dirQueue->head = D;
     dirQueue->tail = D;
 
-    // Initializing start lock, dirQueue lock and threadsQueue lock
+    // Initializing start lock, and lock, dirQueue lock and threadsQueue lock
     // printf("init locks\n");
     returnVal = pthread_mutex_init(&slock, NULL);
     if (returnVal) {
         perror("Can't initialize slock mutex");
+        exit(1);
+    }
+    returnVal = pthread_mutex_init(&elock, NULL);
+    if (returnVal) {
+        perror("Can't initialize elock mutex");
         exit(1);
     }
     returnVal = pthread_mutex_init(&dqlock, NULL);
@@ -237,9 +251,9 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
     
-    // Creating start CV
+    // Creating start and end CV
     pthread_cond_init(&startCV, NULL);
-    pthread_mutex_lock(&slock);
+    pthread_cond_init(&endCV, NULL);
 
     // Creating threads and cvs
     // printf("Creating threads and cvs\n");
@@ -257,9 +271,16 @@ int main(int argc, char *argv[]) {
     // }
 
     // Signaling the threads to start
+    pthread_mutex_lock(&slock);
     startFlag = 1;
     printf("flag is 1\n");
     pthread_cond_broadcast(&startCV);
+    pthread_mutex_unlock(&slock);
+
+    while (endFlag == 0) {
+        printf("waiting for end\n");
+        pthread_cond_wait(&endCV, &elock);
+    }
 
     // Destroying locks
     pthread_mutex_destroy(&slock);
@@ -273,6 +294,5 @@ int main(int argc, char *argv[]) {
 
     // Printing message
     printf("Done searching, found %d files\n", fileCounter);
-
     exit(0);
 }
