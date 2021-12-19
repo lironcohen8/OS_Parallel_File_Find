@@ -121,8 +121,8 @@ struct directoryNode* dirDequeue(int threadIndex) {
 void *searchTermInDir(void *i) {
     printf("in function, thread %d\n", *((int *) i));
     // Waiting for signal from main thread
-    //waitingForStartCounter++;
-    //pthread_cond_wait(&startCV, &slock);
+    waitingForStartCounter++;
+    pthread_cond_wait(&startCV, &slock);
     int threadIndex = *((int *) i);
 
     while (1) {
@@ -167,6 +167,7 @@ void *searchTermInDir(void *i) {
             closedir(dir);
         }
         threadEnqueue(threadIndex);
+        pthread_mutex_lock(&dqlock);
         pthread_cond_wait(&cvs[threadIndex], &dqlock);
     }
 }
@@ -247,11 +248,12 @@ int main(int argc, char *argv[]) {
         pthread_cond_init(&cvs[i], NULL);
     }
 
-    // while (waitingForStartCounter < numOfThreads) {
-    // }
+    while (waitingForStartCounter < numOfThreads) {
+        printf("nubmer of waiting is %d\n", waitingForStartCounter);
+    }
 
     // Signaling the threads to start
-    // pthread_cond_broadcast(&startCV);
+    pthread_cond_broadcast(&startCV);
 
     // Destroying locks
     pthread_mutex_destroy(&slock);
