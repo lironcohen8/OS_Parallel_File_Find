@@ -35,7 +35,8 @@ struct threadsQueue {
 pthread_mutex_t slock, dqlock, tqlock;
 pthread_cond_t startCV;
 pthread_cond_t *cvs;
-atomic_int fileCounter, waitingForStartCounter;
+atomic_int fileCounter;
+int startFlag = 0;
 struct dirQueue *dirQueue;
 struct threadsQueue *threadsQueue;
 char *searchTerm;
@@ -121,8 +122,11 @@ struct directoryNode* dirDequeue(int threadIndex) {
 void *searchTermInDir(void *i) {
     printf("in function, thread %d\n", *((int *) i));
     // Waiting for signal from main thread
-    waitingForStartCounter++;
-    pthread_cond_wait(&startCV, &slock);
+    while (startFlag == 0) {
+        printf("thread %d is waiting\n",  *((int *) i));
+        pthread_cond_wait(&startCV, &slock);
+    }
+    printf("thread %d is starting\n",  *((int *) i));
     int threadIndex = *((int *) i);
 
     while (1) {
@@ -248,11 +252,13 @@ int main(int argc, char *argv[]) {
         pthread_cond_init(&cvs[i], NULL);
     }
 
-    while (waitingForStartCounter < numOfThreads) {
-        printf("nubmer of waiting is %d\n", waitingForStartCounter);
-    }
+    // while (waitingForStartCounter < numOfThreads) {
+    //     printf("nubmer of waiting is %d\n", waitingForStartCounter);
+    // }
 
     // Signaling the threads to start
+    startFlag = 1;
+    printf("flag is 1\n");
     pthread_cond_broadcast(&startCV);
 
     // Destroying locks
