@@ -11,28 +11,33 @@
 #include <limits.h>
 #include <unistd.h>
 
+// Directory node for dirQueue nodes
 struct directoryNode {
     char *dirPath;
     // TODO check if PATH_MAX is needed
     struct directoryNode *nextDir;
 };
- 
+
+// Thread Object for threadsArr
 struct threadObj {
     int threadIndex;
     pthread_t thread;
     char *dirPath;
 };
 
+// Thread node for threadsQueue nodes
 struct threadNode {
     int threadIndex;
     struct threadNode *nextThreadNode;
 };
 
+// Directories Queue
 struct dirQueue {
     struct directoryNode *head;
     struct directoryNode *tail;
 };
 
+// Threads Queue
 struct threadsQueue {
     struct threadNode *head; // index of thread that went to sleep first
     struct threadNode *tail; // index of thread that went to sleep last
@@ -50,13 +55,14 @@ struct threadObj **threadsArr;
 char *searchTerm;
 
 void threadEnqueue(int threadIndex) {
+    // Creating threadNode object
     struct threadNode *threadNode = (struct threadNode *)calloc(1, sizeof(struct threadNode));
     threadNode->threadIndex = threadIndex;
     
     pthread_mutex_lock(&tqlock);
     // printf("%d locked tlock\n", threadIndex);
     
-    // Adding thread Node to queue
+    // Adding threadNode to queue
     if (threadsQueue->head == NULL) {
         threadsQueue->head = threadNode;
         threadsQueue->tail = threadNode;
@@ -67,6 +73,8 @@ void threadEnqueue(int threadIndex) {
     }
     numOfSleepingThreads++;
     printf("%d added thread %d to tQueue. sleeping count is: %d\n", threadIndex, threadIndex, numOfSleepingThreads);
+    
+    // Checking if we finished and signaling main if so
     if ((numOfSleepingThreads == numOfThreads) && ((dirQueue->head) == NULL)) {
         printf("%d waking main for end\n", threadIndex);
         endFlag = 1;
@@ -74,6 +82,7 @@ void threadEnqueue(int threadIndex) {
         pthread_cond_signal(&endCV);
         // printf("%d unlocked elock\n", threadIndex);
     }
+
     pthread_mutex_unlock(&tqlock);
     // printf("%d unlocked tlock\n", threadIndex);
 }
@@ -96,21 +105,25 @@ struct threadNode* threadDequeue(int threadIndex) {
 }
 
 void dirEnqueue(int threadIndex, char *path, char *name) {
+    // Creating dir full path
     char *dirPath = (char *)calloc(1, PATH_MAX);
     strcat(dirPath, path);
     strcat(dirPath, "/");
     strcat(dirPath, name);
+
     pthread_mutex_lock(&tqlock);
+    // If there is a sleeping thread, assign dir to it and wake it up
     if (threadsQueue->head != NULL) {
         struct threadNode* threadToWake = threadDequeue(threadIndex);
         pthread_mutex_unlock(&tqlock);
         int indexToWake = threadToWake->threadIndex;
-        struct threadObj *thread = threadsArr[indexToWake];
-        thread->dirPath = dirPath;
-        printf("assigning path %s to thread %d\n", dirPath, threadIndex);
+        struct threadObj *threadObj = threadsArr[indexToWake];
+        threadObj->dirPath = dirPath;
+        printf("assigned path %s to thread %d\n", dirPath, threadIndex);
         printf("%d signaling thread to wake %d\n", threadIndex, indexToWake);
         pthread_cond_signal(&cvs[indexToWake]);
     }
+    // If there is not sleeping thread, adding dir to queue
     else {
         // Creating directory node
         struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
@@ -151,12 +164,14 @@ struct directoryNode* dirDequeue(int threadIndex) {
         pthread_cond_wait(&cvs[threadIndex], &dqlock);
         printf("%d woke up\n", threadIndex);
     }
+
     // Remove first dir from queue
     firstDirInQueue = dirQueue->head;
     dirQueue->head = firstDirInQueue->nextDir;
     firstDirInQueue->nextDir = NULL;
     pthread_mutex_unlock(&dqlock);
     // printf("%d unlocked dlock\n", threadIndex);
+    
     printf("%d in dirDequeue, got path %s\n", threadIndex, firstDirInQueue->dirPath);
     return firstDirInQueue;
 }
@@ -225,7 +240,7 @@ void *searchTermInDir(void *threadObj) {
             printf("Directory %s: Permission denied.\n", dirPath);
         }
     }
-    
+
     return NULL;
 }
 
