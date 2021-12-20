@@ -121,10 +121,9 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
         pthread_mutex_unlock(&tqlock);
         // printf("%d unlocked tlock in dirEnqueue\n", threadIndex);
         int indexToWake = threadToWake->threadIndex;
-        struct threadObj *threadObj = threadsArr[indexToWake];
-        threadObj->dirPath = dirPath;
-        printf("assigned path %s to thread %d\n", dirPath, threadIndex);
-        printf("%d signaling thread to wake %d\n", threadIndex, indexToWake);
+        (threadsArr[indexToWake])->dirPath = dirPath;
+        printf("assigned path %s to thread %d\n", dirPath, indexToWake);
+        printf("%d signaling thread %d to wake up\n", threadIndex, indexToWake);
         pthread_cond_signal(&cvs[indexToWake]);
     }
     // If there is not sleeping thread, adding dir to queue
@@ -201,6 +200,7 @@ void *searchTermInDir(void *threadObj) {
     // In practice, will stop when program is finished
     while (1) {
         // If directory is assigned, take it
+        printf("%d assigned path is: %s\n", threadIndex, threadsArr[threadIndex]->dirPath);
         if ((threadsArr[threadIndex]->dirPath) != NULL) {
             dirPath = threadsArr[threadIndex]->dirPath;
             threadsArr[threadIndex]->dirPath = NULL;
