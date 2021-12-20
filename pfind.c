@@ -9,7 +9,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <limits.h>
-#include <unistd.h>
 
 // Directory node for dirQueue nodes
 struct directoryNode {
@@ -72,11 +71,11 @@ void threadEnqueue(int threadIndex) {
         threadsQueue->tail = threadNode;
     }
     numOfSleepingThreads++;
-    printf("%d added thread %d to tQueue. sleeping count is: %d\n", threadIndex, threadIndex, numOfSleepingThreads);
+    // printf("%d added thread %d to tQueue. sleeping count is: %d\n", threadIndex, threadIndex, numOfSleepingThreads);
     
     // Checking if we finished and signaling main if so
     if ((numOfSleepingThreads == numOfThreads) && ((dirQueue->head) == NULL)) {
-        printf("%d waking main for end\n", threadIndex);
+        // printf("%d waking main for end\n", threadIndex);
         endFlag = 1;
         // printf("%d locked elock\n", threadIndex);
         pthread_cond_signal(&endCV);
@@ -102,16 +101,14 @@ struct threadNode* threadDequeue(int threadIndex) {
 
     // pthread_mutex_unlock(&tqlock);
     // printf("%d unlocked tlock in threadDequeue\n", threadIndex);
-    printf("%d got thread %d out of tQueue. sleeping count is: %d\n", threadIndex, firstThreadInQueue->threadIndex, numOfSleepingThreads);
+    // printf("%d got thread %d out of tQueue. sleeping count is: %d\n", threadIndex, firstThreadInQueue->threadIndex, numOfSleepingThreads);
     return firstThreadInQueue;
 }
 
 void dirEnqueue(int threadIndex, char *path, char *name) {
     // Creating dir full path
     char *dirPath = (char *)calloc(1, PATH_MAX);
-    strcat(dirPath, path);
-    strcat(dirPath, "/");
-    strcat(dirPath, name);
+    sprintf(dirPath, "%s/%s", path, name);
 
     pthread_mutex_lock(&tqlock);
     // printf("%d locked tlock in dirEnqueue\n", threadIndex);
@@ -122,8 +119,8 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
         // printf("%d unlocked tlock in dirEnqueue\n", threadIndex);
         int indexToWake = threadToWake->threadIndex;
         (threadsArr[indexToWake])->dirPath = dirPath;
-        printf("assigned path %s to thread %d\n", dirPath, indexToWake);
-        printf("%d signaling thread %d to wake up\n", threadIndex, indexToWake);
+        // printf("assigned path %s to thread %d\n", dirPath, indexToWake);
+        // printf("%d signaling thread %d to wake up\n", threadIndex, indexToWake);
         pthread_cond_signal(&cvs[indexToWake]);
     }
     // If there is no sleeping threads, adding dir to queue
@@ -133,7 +130,7 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
         // Creating directory node
         struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
         D->dirPath = dirPath;
-        printf("%d in dirEnqueue, adding path %s\n", threadIndex, D->dirPath);
+        // printf("%d in dirEnqueue, adding path %s\n", threadIndex, D->dirPath);
         pthread_mutex_lock(&dqlock);
         // printf("%d locked dlock in dirEnqueue\n", threadIndex);
         // Adding dir to queue
@@ -170,7 +167,7 @@ struct directoryNode* dirDequeue(int threadIndex) {
     pthread_mutex_unlock(&dqlock);
     // printf("%d unlocked dlock in dirDequeue\n", threadIndex);
 
-    printf("%d in dirDequeue, got path %s\n", threadIndex, firstDirInQueue->dirPath);
+    // printf("%d in dirDequeue, got path %s\n", threadIndex, firstDirInQueue->dirPath);
     return firstDirInQueue;
 }
 
@@ -188,9 +185,19 @@ void searchTermInDir(int threadIndex, char *dirPath) {
                 continue;
             }
 
+            // Assabsle entry's full path
+            char *entryPath = (char *)calloc(1, PATH_MAX);
+            sprintf(entryPath, "%s/%s", dirPath, entryName);
+            
+            // Checking entry type
+            struct stat entryStat;
+            stat(entryPath, &entryStat);
+
+            // If it's a directory
+            if (S_ISDIR(entryStat.st_mode)) {
             // If it's a directory, add it to dirQueue (or assign it to sleeping thread)
             // TODO check about links
-            if (entry->d_type == DT_DIR) {                      
+            //if (entry->d_type == DT_DIR) {                      
                 dirEnqueue(threadIndex, dirPath, entryName);
             }
 
@@ -205,7 +212,7 @@ void searchTermInDir(int threadIndex, char *dirPath) {
             }
         }
         // Finished dir
-        printf("%d finished dir %s\n", threadIndex, dirPath);
+        // printf("%d finished dir %s\n", threadIndex, dirPath);
         closedir(dir);
     }
     // Directory can not be searched
@@ -218,21 +225,18 @@ void *searchTermFunc(void *threadObj) {
     char *dirPath;
     int threadIndex = ((struct threadObj *)threadObj)->threadIndex;
 
-    printf("%d in function\n", threadIndex);
     // Waiting for signal from main thread
     pthread_mutex_lock(&slock);
     while (startFlag == 0) {
-        printf("thread %d is waiting\n", threadIndex);
         pthread_cond_wait(&startCV, &slock);
     }
     pthread_mutex_unlock(&slock);
-    printf("%d is starting\n", threadIndex);
+    // printf("%d is starting\n", threadIndex);
     
     // In practice, will stop when program is finished
     while (1) {
         // If directory is assigned, search in it
         if ((threadsArr[threadIndex]->dirPath) != NULL) {
-            printf("%d is in assigned part\n", threadIndex);
             dirPath = threadsArr[threadIndex]->dirPath;
             threadsArr[threadIndex]->dirPath = NULL;
             searchTermInDir(threadIndex, dirPath);
@@ -250,7 +254,6 @@ void *searchTermFunc(void *threadObj) {
         pthread_mutex_lock(&stlock);
         pthread_cond_wait(&cvs[threadIndex], &stlock);
         pthread_mutex_unlock(&stlock);
-        printf("%d woke up\n", threadIndex);
     }
     return NULL;
 }
@@ -342,12 +345,10 @@ int main(int argc, char *argv[]) {
 
     // Signaling the threads to start
     startFlag = 1;
-    printf("flag is 1\n");
     pthread_cond_broadcast(&startCV);
     pthread_mutex_unlock(&slock);
 
     while (endFlag == 0) {
-        printf("waiting for end\n");
         pthread_cond_wait(&endCV, &elock);
     }
 
