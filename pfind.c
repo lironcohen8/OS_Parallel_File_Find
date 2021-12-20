@@ -125,6 +125,7 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
     }
     // If there is not sleeping thread, adding dir to queue
     else {
+        pthread_mutex_unlock(&tqlock);
         // Creating directory node
         struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
         D->dirPath = dirPath;
@@ -171,7 +172,7 @@ struct directoryNode* dirDequeue(int threadIndex) {
     firstDirInQueue->nextDir = NULL;
     pthread_mutex_unlock(&dqlock);
     // printf("%d unlocked dlock\n", threadIndex);
-    
+
     printf("%d in dirDequeue, got path %s\n", threadIndex, firstDirInQueue->dirPath);
     return firstDirInQueue;
 }
