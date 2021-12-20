@@ -16,8 +16,7 @@ struct directoryNode {
     // TODO check if PATH_MAX is needed
     struct directoryNode *nextDir;
 };
-
-// 
+ 
 struct threadObj {
     int threadIndex;
     pthread_t thread;
@@ -232,7 +231,6 @@ int main(int argc, char *argv[]) {
     }
 
     // Parsing arguments
-    // printf("parsing\n");
     rootDirPath = argv[1];
     searchTerm = argv[2];
     sscanf(argv[3],"%d",&numOfThreads);
@@ -241,30 +239,24 @@ int main(int argc, char *argv[]) {
     cvs = (pthread_cond_t *)calloc(numOfThreads, sizeof(pthread_cond_t));
 
     // Creating directory queue
-    // printf("creating dQueue\n");
     dirQueue = (struct dirQueue*)calloc(1, sizeof(struct dirQueue));
     
     // Creating threads sleeping queue
-    // printf("creating tQueue\n");
     threadsQueue = (struct threadsQueue*)calloc(1, sizeof(struct threadsQueue));
 
     // Checking that search root directory can be searched
-    // printf("trying to open root\n");
     if (opendir(rootDirPath) == NULL) {
         perror("Can't search in root directory");
         exit(1);
     }
 
-    // Adding root directory to dirQueue
-    // printf("Creating root directory and put it in queue\n");
-    // printf("before dir enqueue\n");
+    // Creating root directory and adding it to dirQueue
     struct directoryNode* D = (struct directoryNode *)calloc(1, sizeof(struct directoryNode));
     D->dirPath = rootDirPath;
     dirQueue->head = D;
     dirQueue->tail = D;
 
-    // Initializing start lock, and lock, dirQueue lock and threadsQueue lock
-    // printf("init locks\n");
+    // Initializing start lock, end lock, dirQueue lock and threadsQueue lock
     returnVal = pthread_mutex_init(&slock, NULL);
     if (returnVal) {
         perror("Can't initialize slock mutex");
@@ -286,33 +278,30 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
     
-    // Creating start and end CV
+    // Creating start and end CV and locking their locks
     pthread_cond_init(&startCV, NULL);
-    pthread_cond_init(&endCV, NULL);
     pthread_mutex_lock(&slock);
+    pthread_cond_init(&endCV, NULL);
     pthread_mutex_lock(&elock);
 
     // Creating threads and cvs
-    // printf("Creating threads and cvs\n");
     for (i = 0; i < numOfThreads; i++) {
+        // Creating thread Object
         struct threadObj *threadObj = (struct threadObj *)calloc(1, sizeof(struct threadObj));
         threadsArr[i] = threadObj;
         threadObj->threadIndex = i;
-        printf("index is %d\n", i);
+        // Creating thread and assign it to search function
         returnVal = pthread_create(&(threadsArr[i]->thread), NULL, searchTermInDir, (void *)threadObj);
         if (returnVal) {
             perror("Can't create thread");
             exit(1);
         }
+        // Creating relevant CV
         pthread_cond_init(&cvs[i], NULL);
     }
 
-    // while (waitingForStartCounter < numOfThreads) {
-    //     printf("nubmer of waiting is %d\n", waitingForStartCounter);
-    // }
-
     // Signaling the threads to start
-    // TODO delete
+    // TODO delete sleep
     sleep(2);
     startFlag = 1;
     printf("flag is 1\n");
@@ -328,6 +317,7 @@ int main(int argc, char *argv[]) {
     pthread_mutex_destroy(&slock);
     pthread_mutex_destroy(&tqlock);
     pthread_mutex_destroy(&dqlock);
+    pthread_mutex_destroy(&elock);
 
     // Destroying cvs
     for (i = 0; i < numOfThreads; ++i) {
