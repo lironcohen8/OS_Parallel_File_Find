@@ -326,8 +326,6 @@ int main(int argc, char *argv[]) {
     }
 
     // Signaling the threads to start
-    // TODO delete sleep
-    sleep(2);
     startFlag = 1;
     printf("flag is 1\n");
     pthread_cond_broadcast(&startCV);
@@ -344,8 +342,9 @@ int main(int argc, char *argv[]) {
     pthread_mutex_destroy(&dqlock);
     pthread_mutex_destroy(&elock);
 
-    // Destroying cvs
-    for (i = 0; i < numOfThreads; ++i) {
+    // Destroying cvs (requires waking up all waiting threads)
+    for (i = 0; i < numOfThreads; i++) {
+        pthread_cond_broadcast(&cvs[i]);
         pthread_cond_destroy(&cvs[i]);
     }
 
