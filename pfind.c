@@ -162,13 +162,6 @@ struct directoryNode* dirDequeue(int threadIndex) {
     pthread_mutex_lock(&dqlock);
     // printf("%d locked dlock\n", threadIndex);
     // while queue is empty
-    if ((dirQueue->head) == NULL) {
-        threadEnqueue(threadIndex);
-    }
-    while ((dirQueue->head) == NULL) {
-        pthread_cond_wait(&cvs[threadIndex], &dqlock);
-        printf("%d woke up\n", threadIndex);
-    }
 
     // Remove first dir from queue
     firstDirInQueue = dirQueue->head;
@@ -181,9 +174,47 @@ struct directoryNode* dirDequeue(int threadIndex) {
     return firstDirInQueue;
 }
 
-void *searchTermInDir(void *threadObj) {
+void searchTermInDir(int threadIndex, char *dirPath) {
     DIR *dir;
     struct dirent *entry;
+    // If directory can be searched, read entries
+    if ((dir = opendir(dirPath)) != NULL) {
+        // printf("thread number %d is searching dir %s\n", threadIndex, d->dirPath);
+        while ((entry = readdir(dir)) != NULL) {
+            char *entryName = entry->d_name;
+            //printf("thread number %d is searching folder %s entry %s\n", threadIndex, d->dirPath, entryName);
+            // Skipping . and .. entries
+            if ((strcmp(entryName, ".") == 0) || (strcmp(entryName, "..") == 0)) {
+                continue;
+            }
+
+            // If it's a directory, add it to dirQueue (or assign it to sleeping thread)
+            // TODO check about links
+            if (entry->d_type == DT_DIR) {                      
+                dirEnqueue(threadIndex, dirPath, entryName);
+            }
+
+            // If it's not a directory
+            else {
+                // If entry name contains search term, found one
+                if (strstr(entryName, searchTerm) != NULL) {
+                    // TODO make sure it's a full path
+                    printf("%s/%s\n", dirPath, entryName);
+                    fileCounter++;
+                }
+            }
+        }
+        // Finished dir
+        printf("%d finished dir %s\n", threadIndex, dirPath);
+        closedir(dir);
+    }
+    // Directory can not be searched
+    else {
+        printf("Directory %s: Permission denied.\n", dirPath);
+    }
+}
+
+void *searchTermFunc(void *threadObj) {
     char *dirPath;
     int threadIndex = ((struct threadObj *)threadObj)->threadIndex;
 
@@ -199,54 +230,26 @@ void *searchTermInDir(void *threadObj) {
     
     // In practice, will stop when program is finished
     while (1) {
-        // If directory is assigned, take it
-        printf("%d assigned path is: %s\n", threadIndex, threadsArr[threadIndex]->dirPath);
+        // If directory is assigned, search in it
         if ((threadsArr[threadIndex]->dirPath) != NULL) {
+            printf("%d is in assigned part\n", threadIndex);
             dirPath = threadsArr[threadIndex]->dirPath;
             threadsArr[threadIndex]->dirPath = NULL;
+            searchTermInDir(threadIndex, dirPath);
         }
-        // If directory is not assigned, dequeue one from dirQueue
-        else {
+
+        // At this point, assigned directory was searched (if existed)
+        // Taking next directory from dirQueue
+        while ((dirQueue->head) != NULL) {
             dirPath = (dirDequeue(threadIndex))->dirPath;
+            searchTermInDir(threadIndex, dirPath);
         }
-
-        // If directory can be searched, read entries
-        if ((dir = opendir(dirPath)) != NULL) {
-            // printf("thread number %d is searching dir %s\n", threadIndex, d->dirPath);
-            while ((entry = readdir(dir)) != NULL) {
-                char *entryName = entry->d_name;
-                //printf("thread number %d is searching folder %s entry %s\n", threadIndex, d->dirPath, entryName);
-                // Skipping . and .. entries
-                if ((strcmp(entryName, ".") == 0) || (strcmp(entryName, "..") == 0)) {
-                    continue;
-                }
-
-                // If it's a directory, add it to dirQueue (or assign it to sleeping thread)
-                // TODO check about links
-                if (entry->d_type == DT_DIR) {                      
-                    dirEnqueue(threadIndex, dirPath, entryName);
-                }
-
-                // If it's not a directory
-                else {
-                    // If entry name contains search term, found one
-                    if (strstr(entryName, searchTerm) != NULL) {
-                        // TODO make sure it's a full path
-                        printf("%s/%s\n", dirPath, entryName);
-                        fileCounter++;
-                    }
-                }
-            }
-            // Finished dir
-            printf("%d finished dir %s\n", threadIndex, dirPath);
-            closedir(dir);
-        }
-        // Directory can not be searched
-        else {
-            printf("Directory %s: Permission denied.\n", dirPath);
-        }
+        
+        // dirQueue is empty, goint to sleep
+        threadEnqueue(threadIndex);
+        pthread_cond_wait(&cvs[threadIndex], &dqlock);
+        printf("%d woke up\n", threadIndex);
     }
-
     return NULL;
 }
 
@@ -321,7 +324,7 @@ int main(int argc, char *argv[]) {
         threadsArr[i] = threadObj;
         threadObj->threadIndex = i;
         // Creating thread and assign it to search function
-        returnVal = pthread_create(&(threadsArr[i]->thread), NULL, searchTermInDir, (void *)threadObj);
+        returnVal = pthread_create(&(threadsArr[i]->thread), NULL, searchTermFunc, (void *)threadObj);
         if (returnVal) {
             perror("Can't create thread");
             exit(1);
