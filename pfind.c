@@ -135,7 +135,7 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
         D->dirPath = dirPath;
         printf("%d in dirEnqueue, adding path %s\n", threadIndex, D->dirPath);
         pthread_mutex_lock(&dqlock);
-        printf("%d locked dlock in dirEnqueue\n", threadIndex);
+        // printf("%d locked dlock in dirEnqueue\n", threadIndex);
         // Adding dir to queue
         if (dirQueue->head == NULL) {
             dirQueue->head = D;
@@ -153,14 +153,14 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
         //     pthread_cond_signal(&cvs[indexToWake]);
         // }
         pthread_mutex_unlock(&dqlock);
-        printf("%d unlocked dlock in dirEnqueue\n", threadIndex);
+        // printf("%d unlocked dlock in dirEnqueue\n", threadIndex);
     }
 }
 
 struct directoryNode* dirDequeue(int threadIndex) {
     struct directoryNode *firstDirInQueue = NULL;
     pthread_mutex_lock(&dqlock);
-    printf("%d locked dlock in dirDequeue\n", threadIndex);
+    // printf("%d locked dlock in dirDequeue\n", threadIndex);
     // while queue is empty
 
     // Remove first dir from queue
@@ -168,7 +168,7 @@ struct directoryNode* dirDequeue(int threadIndex) {
     dirQueue->head = firstDirInQueue->nextDir;
     firstDirInQueue->nextDir = NULL;
     pthread_mutex_unlock(&dqlock);
-    printf("%d unlocked dlock in dirDequeue\n", threadIndex);
+    // printf("%d unlocked dlock in dirDequeue\n", threadIndex);
 
     printf("%d in dirDequeue, got path %s\n", threadIndex, firstDirInQueue->dirPath);
     return firstDirInQueue;
