@@ -46,7 +46,8 @@ void threadEnqueue(int threadIndex) {
     threadNode->threadIndex = threadIndex;
     
     pthread_mutex_lock(&tqlock);
-    printf("%d added thread %d to tQueue\n", threadIndex, threadIndex);
+    // printf("%d locked tlock\n", threadIndex);
+    
     // Adding thread Node to queue
     if (threadsQueue->head == NULL) {
         threadsQueue->head = threadNode;
@@ -56,28 +57,36 @@ void threadEnqueue(int threadIndex) {
         threadsQueue->tail->nextThread = threadNode;
         threadsQueue->tail = threadNode;
     }
-    printf("%d tQueue head is %d\n", threadIndex, threadsQueue->head->threadIndex);
-    if ((++numOfSleepingThreads == numOfThreads) && ((dirQueue->head) == NULL)) {
+    numOfSleepingThreads++;
+    printf("%d added thread %d to tQueue. sleeping count is: %d\n", threadIndex, threadIndex, numOfSleepingThreads);
+    if ((numOfSleepingThreads == numOfThreads) && ((dirQueue->head) == NULL)) {
         printf("%d waking main for end\n", threadIndex);
         endFlag = 1;
         pthread_mutex_lock(&elock);
+        // printf("%d locked elock\n", threadIndex);
         pthread_cond_signal(&endCV);
         pthread_mutex_unlock(&elock);
+        // printf("%d unlocked elock\n", threadIndex);
+
     }
     pthread_mutex_unlock(&tqlock);
+    // printf("%d unlocked tlock\n", threadIndex);
 }
 
 struct threadNode* threadDequeue(int threadIndex) {
     struct threadNode* firstThreadInQueue = NULL;
     pthread_mutex_lock(&tqlock);
+    // printf("%d locked tlock\n", threadIndex);
 
     // Remove first thread from queue
     firstThreadInQueue = threadsQueue->head;
     threadsQueue->head = firstThreadInQueue->nextThread;
     firstThreadInQueue->nextThread = NULL;
+    numOfSleepingThreads--;
 
     pthread_mutex_unlock(&tqlock);
-    printf("%d got thread %d out of tQueue", threadIndex, firstThreadInQueue->threadIndex);
+    // printf("%d unlocked tlock\n", threadIndex);
+    printf("%d got thread %d out of tQueue. sleeping count is: %d\n", threadIndex, firstThreadInQueue->threadIndex, numOfSleepingThreads);
     return firstThreadInQueue;
 }
 
@@ -90,6 +99,7 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
     strcat(D->dirPath, name);
     printf("%d in dirEnqueue, adding path %s\n", threadIndex, D->dirPath);
     pthread_mutex_lock(&dqlock);
+    // printf("%d locked dlock\n", threadIndex);
     // Adding dir to queue
     if (dirQueue->head == NULL) {
         dirQueue->head = D;
@@ -108,22 +118,25 @@ void dirEnqueue(int threadIndex, char *path, char *name) {
         threadDequeue(threadIndex);
     }
     pthread_mutex_unlock(&dqlock);
+    // printf("%d unlocked dlock\n", threadIndex);
 }
 
 struct directoryNode* dirDequeue(int threadIndex) {
     struct directoryNode * firstDirInQueue = NULL;
     pthread_mutex_lock(&dqlock);
+    // printf("%d locked dlock\n", threadIndex);
     // while queue is empty
     if ((dirQueue->head)==NULL) {
         threadEnqueue(threadIndex);
-        while (pthread_cond_wait(&cvs[threadIndex], &dqlock)) {
-        }
+        pthread_cond_wait(&cvs[threadIndex], &dqlock);
+        printf("%d woke up\n", threadIndex);
     }
     // Remove first dir from queue
     firstDirInQueue = dirQueue->head;
     dirQueue->head = firstDirInQueue->nextDir;
     firstDirInQueue->nextDir = NULL;
     pthread_mutex_unlock(&dqlock);
+    // printf("%d unlocked dlock\n", threadIndex);
     printf("%d in dirDequeue, got path %s\n", threadIndex, firstDirInQueue->dirPath);
     return firstDirInQueue;
 }
@@ -184,6 +197,7 @@ void *searchTermInDir(void *i) {
         printf("%d is about to go to sleep\n", threadIndex);
         threadEnqueue(threadIndex);
         pthread_mutex_lock(&dqlock);
+        // printf("%d locked dlock\n", threadIndex);
         pthread_cond_wait(&cvs[threadIndex], &dqlock);
     }
 }
