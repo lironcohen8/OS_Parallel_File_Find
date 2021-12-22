@@ -40,7 +40,6 @@ struct dirQueue {
 struct threadsQueue {
     struct threadNode *head; // index of thread that went to sleep first
     struct threadNode *tail; // index of thread that went to sleep last
-    int numOfSleepingThreads;
 };
 
 pthread_mutex_t slock, dqlock, tqlock, elock, stlock;
@@ -57,6 +56,10 @@ void threadError(int threadIndex) {
     numOfThreads--;
     perror("Error in thread, exiting thread");
     pthread_exit(NULL);
+}
+
+void freeResources() {
+
 }
 
 void threadEnqueue(int threadIndex) {
@@ -126,14 +129,7 @@ struct threadNode* threadDequeue(int threadIndex) {
     return firstThreadInQueue;
 }
 
-void dirEnqueue(int threadIndex, char *path, char *name) {
-    // Creating dir full path
-    char *dirPath = (char *)calloc(1, PATH_MAX);
-    if (dirPath == NULL) {
-        threadError(threadIndex);
-    }
-    sprintf(dirPath, "%s/%s", path, name);
-
+void dirEnqueue(int threadIndex, char *dirPath) {
     pthread_mutex_lock(&tqlock);
     printf("***%d locked tlock in dirEnqueue\n", threadIndex);
     // If there is a sleeping thread, assign dir to it and wake it up
@@ -214,12 +210,17 @@ void searchTermInDir(int threadIndex, char *dirPath) {
                 continue;
             }
 
-            // Assabsle entry's full path
+            // Assamble entry's full path
             char *entryPath = (char *)calloc(1, PATH_MAX);
             if (entryPath == NULL) {
                 threadError(threadIndex);
             }
-            sprintf(entryPath, "%s/%s", dirPath, entryName);
+            if (dirPath[strlen(dirPath)-1] == '/') {
+                sprintf(entryPath, "%s%s", dirPath, entryName);
+            }
+            else {
+                sprintf(entryPath, "%s/%s", dirPath, entryName);
+            }
             
             // Checking entry type
             // TODO change back to stat
@@ -234,7 +235,7 @@ void searchTermInDir(int threadIndex, char *dirPath) {
             // If it's a directory, add it to dirQueue (or assign it to sleeping thread)
             // TODO check about links
             //if (entry->d_type == DT_DIR) {                      
-                dirEnqueue(threadIndex, dirPath, entryName);
+                dirEnqueue(threadIndex, entryPath);
             }
 
             // If it's not a directory
@@ -435,5 +436,6 @@ int main(int argc, char *argv[]) {
 
     // Printing message
     printf("Done searching, found %d files\n", fileCounter);
+    freeResources();
     exit(0);
 }
