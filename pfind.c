@@ -13,7 +13,6 @@
 // Directory node for dirQueue nodes
 struct directoryNode {
     char *dirPath;
-    // TODO check if PATH_MAX is needed
     struct directoryNode *nextDir;
 };
 
@@ -197,9 +196,8 @@ void searchTermInDir(int threadIndex, char *dirPath) {
             sprintf(entryPath, "%s/%s", dirPath, entryName);
             
             // Checking entry type
-            // TODO change back to stat
             struct stat entryStat;
-            returnVal = lstat(entryPath, &entryStat);
+            returnVal = stat(entryPath, &entryStat);
             if  (returnVal != 0) {
                 threadError(threadIndex);
             }
@@ -207,7 +205,6 @@ void searchTermInDir(int threadIndex, char *dirPath) {
             // If it's a directory
             if (S_ISDIR(entryStat.st_mode)) {
             // Add it to dirQueue or assign it to sleeping thread
-            // TODO check about links
                 dirEnqueue(threadIndex, entryPath);
             }
 
@@ -215,7 +212,6 @@ void searchTermInDir(int threadIndex, char *dirPath) {
             else {
                 // If entry name contains search term, found one
                 if (strstr(entryName, searchTerm) != NULL) {
-                    // TODO make sure it's a full path
                     printf("%s\n", entryPath);
                     fileCounter++;
                 }
@@ -371,7 +367,7 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < numOfThreads; i++) {
         returnVal = pthread_join(threadsArr[i]->thread, NULL);
         if (returnVal != 0) {
-            perror("error in joining main to threads");
+            perror("Error in joining main to threads");
             printf("Done searching, found %d files\n", fileCounter);
             exit(1);
         }
