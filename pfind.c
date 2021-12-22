@@ -59,7 +59,13 @@ void threadError(int threadIndex) {
 }
 
 void freeResources() {
-
+    for (int i = 0; i < numOfThreads; i++) {
+        free(threadsArr[i]->dirPath);
+        free(threadsArr[i]);
+    }
+    free(threadsQueue);
+    free(dirQueue);
+    free(cvs);
 }
 
 void threadEnqueue(int threadIndex) {
