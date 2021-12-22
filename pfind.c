@@ -47,7 +47,7 @@ pthread_mutex_t slock, dqlock, tqlock, elock, stlock;
 pthread_cond_t startCV, endCV;
 pthread_cond_t *cvs;
 atomic_int fileCounter = 0, numOfSleepingThreads = 0;
-int numOfThreads = 0, startFlag = 0, endFlag = 0, allGoodFlag = 0; returnVal;
+int numOfThreads = 0, startFlag = 0, endFlag = 0, allGoodFlag = 0, returnVal = 0;
 struct dirQueue *dirQueue;
 struct threadsQueue *threadsQueue;
 struct threadObj **threadsArr;
