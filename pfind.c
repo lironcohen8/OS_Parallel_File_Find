@@ -42,11 +42,11 @@ struct threadsQueue {
     struct threadNode *tail; // index of thread that went to sleep last
 };
 
-pthread_mutex_t slock, dqlock, tqlock, elock, stlock;
+pthread_mutex_t slock, dqlock, tqlock, stlock;
 pthread_cond_t startCV, endCV;
 pthread_cond_t *cvs;
-atomic_int fileCounter = 0, numOfSleepingThreads = 0;
-int numOfThreads = 0, startFlag = 0, endFlag = 0, allGoodFlag = 0, returnVal = 0;
+atomic_int fileCounter = 0, numOfThreads = 0, numOfSleepingThreads = 0;
+int startFlag = 0, endFlag = 0, allGoodFlag = 0, returnVal = 0;
 struct dirQueue *dirQueue;
 struct threadsQueue *threadsQueue;
 struct threadObj **threadsArr;
@@ -56,16 +56,6 @@ void threadError(int threadIndex) {
     numOfThreads--;
     perror("Error in thread, exiting thread");
     pthread_exit(NULL);
-}
-
-void freeResources() {
-    for (int i = 0; i < numOfThreads; i++) {
-        free(threadsArr[i]->dirPath);
-        free(threadsArr[i]);
-    }
-    free(threadsQueue);
-    free(dirQueue);
-    free(cvs);
 }
 
 void threadEnqueue(int threadIndex) {
@@ -88,12 +78,15 @@ void threadEnqueue(int threadIndex) {
         threadsQueue->tail->nextThreadNode = threadNode;
         threadsQueue->tail = threadNode;
     }
-    numOfSleepingThreads++;
+    
     printf("***%d added thread %d to tQueue. sleeping count is: %d\n", threadIndex, threadIndex, numOfSleepingThreads);
-    pthread_mutex_unlock(&tqlock);
+
+    // struct threadNode *tmp = threadsQueue->head;
+    // while (tm)
+
 
     // Checking if we finished and signaling main if so
-    if (numOfSleepingThreads == numOfThreads) {
+    if (numOfSleepingThreads+1 == numOfThreads) {
         printf("***%d waking main for end\n", threadIndex);
         endFlag = 1;
         allGoodFlag = 1;
@@ -101,12 +94,14 @@ void threadEnqueue(int threadIndex) {
             if (i == threadIndex) {
                 continue;
             }
-            pthread_cond_broadcast(&cvs[i]);
+            pthread_cond_signal(&cvs[i]);
         }
+        pthread_mutex_unlock(&tqlock);
         pthread_exit(NULL);
     }
 
-    pthread_mutex_lock(&tqlock);
+    printf("***%d going to sleep\n", threadIndex);
+    numOfSleepingThreads++;
     pthread_cond_wait(&cvs[threadIndex], &tqlock);
     printf("***%d woke up\n", threadIndex);
     pthread_mutex_unlock(&tqlock);
@@ -144,7 +139,9 @@ void dirEnqueue(int threadIndex, char *dirPath) {
         pthread_mutex_unlock(&tqlock);
         printf("***%d unlocked tlock in dirEnqueue\n", threadIndex);
         int indexToWake = threadToWake->threadIndex;
+        pthread_mutex_lock(&stlock);
         (threadsArr[indexToWake])->dirPath = dirPath;
+        pthread_mutex_unlock(&stlock);
         printf("***%d assigned path %s to thread %d\n", threadIndex, dirPath, indexToWake);
         printf("***%d signaling thread %d to wake up\n", threadIndex, indexToWake);
         pthread_cond_signal(&cvs[indexToWake]);
@@ -284,10 +281,15 @@ void *searchTermFunc(void *threadObj) {
     // In practice, will stop when program is finished
     while (1) {
         // If directory is assigned, search in it
+        pthread_mutex_lock(&stlock);
         if ((threadsArr[threadIndex]->dirPath) != NULL) {
             dirPath = threadsArr[threadIndex]->dirPath;
             threadsArr[threadIndex]->dirPath = NULL;
+            pthread_mutex_unlock(&stlock);
             searchTermInDir(threadIndex, dirPath);
+        }
+        else {
+            pthread_mutex_unlock(&stlock);
         }
 
         // At this point, assigned directory was searched (if existed)
@@ -368,7 +370,6 @@ int main(int argc, char *argv[]) {
 
     // Initializing start lock, end lock, dirQueue lock, threadsQueue lock and sleepingThread lock
     pthread_mutex_init(&slock, NULL);
-    pthread_mutex_init(&elock, NULL);
     pthread_mutex_init(&dqlock, NULL);
     pthread_mutex_init(&tqlock, NULL);
     pthread_mutex_init(&stlock, NULL);
@@ -378,8 +379,6 @@ int main(int argc, char *argv[]) {
     pthread_mutex_lock(&slock);
     printf("***main locked slock in main\n");
     pthread_cond_init(&endCV, NULL);
-    pthread_mutex_lock(&elock);
-    printf("***main locked elock in main\n");
 
     // Creating threads and cvs
     for (i = 0; i < numOfThreads; i++) {
@@ -417,10 +416,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // while (endFlag == 0) {
-    //     pthread_cond_wait(&endCV, &elock);
-    // }
-
     // Finished due to an error in all threads
     if (allGoodFlag == 0) {
         perror("Error in all threads");
@@ -432,7 +427,6 @@ int main(int argc, char *argv[]) {
     pthread_mutex_destroy(&slock);
     pthread_mutex_destroy(&tqlock);
     pthread_mutex_destroy(&dqlock);
-    pthread_mutex_destroy(&elock);
     pthread_mutex_destroy(&stlock);
 
     // Destroying cvs
@@ -442,6 +436,5 @@ int main(int argc, char *argv[]) {
 
     // Printing message
     printf("Done searching, found %d files\n", fileCounter);
-    freeResources();
     exit(0);
 }
